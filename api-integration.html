@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OnlyOffice Editor - API内容插入</title>
+    <meta charset="UTF-8">
+    <script src="http://localhost:8081/web-apps/apps/api/documents/api.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background-color: #2b579a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .content {
+            padding: 20px;
+        }
+        #placeholder {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .nav {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .nav a {
+            margin-right: 20px;
+            text-decoration: none;
+            color: #2b579a;
+            font-weight: bold;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .controls {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .control-group input, .control-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .control-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        button {
+            background-color: #2b579a;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #1e3f73;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        /* 隐藏OnlyOffice中的编辑模式切换按钮 */
+        .asc-window-wrap .asc-window-body .toolbar .btn-toolbar-menu[data-hint*="编辑"],
+        .asc-window-wrap .asc-window-body .toolbar .btn-toolbar-menu[data-hint*="Edit"],
+        .toolbar .btn-toolbar .btn-toolbar-menu[data-hint*="编辑"],
+        .toolbar .btn-toolbar .btn-toolbar-menu[data-hint*="Edit"],
+        #editor_sdk .toolbar .group:has(.btn-edit-mode),
+        .btn-edit-mode,
+        .edit-mode-dropdown {
+            display: none !important;
+        }
+        
+        /* 强制隐藏左侧面板 - 使用更准确的选择器 */
+        #placeholder iframe,
+        #placeholder .left-panel,
+        #placeholder .left-menu,
+        .asc-window.editor .left-panel,
+        .asc-window.editor .left-menu,
+        .sdk-left-panel,
+        [id*="left-panel"],
+        [class*="left-panel"],
+        [class*="left-menu"] {
+            display: none !important;
+        }
+        
+        /* 强制隐藏右侧面板 */
+        #placeholder .right-panel,
+        #placeholder .right-menu,
+        .asc-window.editor .right-panel,
+        .asc-window.editor .right-menu,
+        .sdk-right-panel,
+        [id*="right-panel"],
+        [class*="right-panel"],
+        [class*="right-menu"] {
+            display: none !important;
+        }
+        
+        /* 强制隐藏底部状态栏 */
+        #placeholder .statusbar,
+        #placeholder .status-bar,
+        .asc-window.editor .statusbar,
+        .asc-window.editor .status-bar,
+        .sdk-statusbar,
+        [id*="statusbar"],
+        [class*="statusbar"],
+        [class*="status-bar"] {
+            display: none !important;
+        }
+        
+        /* 额外的隐藏规则 */
+        .asc-window-left-panel,
+        .asc-window-right-panel,
+        .asc-window-status-bar {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>OnlyOffice Document Editor</h1>
+            <p>API内容插入功能演示</p>
+        </div>
+        <div class="content">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="richTextInput">富文本内容（支持KaTeX公式）:</label>
+                    <textarea id="richTextInput" placeholder="" style="height: 120px;"></textarea>
+                    <button onclick="loadSampleLatex()" style="margin-top: 5px;">加载示例LaTeX内容</button>
+                </div>
+
+
+                <h4>Automation API 功能</h4>
+                <div class="button-group">
+                    <button onclick="testMathEquation()">测试数学公式API</button>
+                    <button onclick="testAllMathMethods()">测试所有数学方法</button>
+                    <button onclick="testMultipleMathEquations()">测试连续数学公式</button>
+                    <button onclick="testAddMathEquationOnly()">仅使用AddMathEquation插入富文本</button>
+                    <button onclick="testFractionFormula()">测试分数公式渲染</button>
+                    <button onclick="insertRichTextWithKaTeX()">插入富文本+KaTeX公式</button>
+
+                </div>
+            </div>
+
+            <div id="placeholder"></div>
+        </div>
+    </div>
+
+    <script>
+        var docEditor;
+        var connector; // Automation API connector
+
+        // 初始化编辑器
+        function initEditor() {
+            docEditor = new DocsAPI.DocEditor("placeholder", {
+                "document": {
+                    "fileType": "docx",
+                    "key": "document-key-api-" + Math.random().toString(36).substr(2, 9),
+                    "title": "API演示文档.docx",
+                    "url": "http://host.docker.internal:8080/documents/template.docx"
+                },
+                "documentType": "word",
+                "editorConfig": {
+                    "callbackUrl": "http://callback-server:8080/callback",
+                    "mode": "edit",
+                    "lang": "zh-CN",
+                    "region": "zh-CN",
+                    "user": {
+                        "id": "user1",
+                        "name": "API演示用户"
+                    },
+                    "customization": {
+                        "logo": {
+                            "image": "",
+                            "imageEmbedded": "",
+                            "url": ""
+                        },
+                        "customer": {
+                            "name": "文档编辑器",
+                            "address": "",
+                            "mail": "",
+                            "www": "",
+                            "info": "",
+                            "logo": ""
+                        },
+                        "toolbar": {
+                            "layout": {
+                                "leftMenu": false,
+                                "rightMenu": false,
+                                "toolbar": true,
+                                "statusBar": false
+                            }
+                        },
+                        "leftMenu": false,
+                        "rightMenu": false,
+                        "help": false,
+                        "feedback": false,
+                        "goback": false,
+                        "comments": false,
+                        "zoom": false,
+                        "compactToolbar": false,
+                        "toolbarNoTabs": false,
+                        "toolbarHideFileName": true,
+                        "hideRightMenu": true,
+                        "hideRulers": true,
+                        "hideLeftPanel": true,
+                        "hideRightPanel": true,
+                        "hideToolbar": false,
+                        "hideHeader": false,
+                        "unit": "cm",
+                        "spellcheck": false,
+                        "anonymous": {
+                            "request": false,
+                            "label": "Guest"
+                        },
+                        "plugins": false
+                    },
+                    "permissions": {
+                        "chat": false,
+                        "comment": false,
+                        "download": true,
+                        "edit": true,
+                        "print": true,
+                        "review": false
+                    }
+                },
+                "height": "600px",
+                "width": "100%",
+                "events": {
+                    "onDocumentReady": function() {
+                        console.log("文档已准备就绪，初始化 Automation API");
+                        initAutomationAPI();
+                        // 隐藏界面元素
+                        hideUIElements();
+                        // insertInitialContent();
+                    }
+                }
+            });
+        }
+
+        window.onload = function() {
+            console.log("window.onload");
+            initEditor();
+
+
+        };
+
+        // 隐藏UI元素函数
+        function hideUIElements() {
+            console.log("开始隐藏UI元素");
+            
+            // 等待OnlyOffice完全加载后再隐藏元素
+            setTimeout(() => {
+                try {
+                    // 获取iframe元素
+                    const iframe = document.querySelector('#placeholder iframe');
+                    if (iframe && iframe.contentDocument) {
+                        const iframeDoc = iframe.contentDocument;
+                        
+                        // 隐藏左侧面板
+                        const leftPanels = iframeDoc.querySelectorAll('.asc-window-left-panel, .left-panel, .sdk-left-panel, [class*="left-panel"]');
+                        leftPanels.forEach(panel => panel.style.display = 'none');
+                        
+                        // 隐藏右侧面板
+                        const rightPanels = iframeDoc.querySelectorAll('.asc-window-right-panel, .right-panel, .sdk-right-panel, [class*="right-panel"]');
+                        rightPanels.forEach(panel => panel.style.display = 'none');
+                        
+                        // 隐藏状态栏
+                        const statusBars = iframeDoc.querySelectorAll('.asc-window-status-bar, .statusbar, .status-bar, [class*="statusbar"]');
+                        statusBars.forEach(bar => bar.style.display = 'none');
+                        
+                        console.log("UI元素隐藏完成");
+                    } else {
+                        console.log("无法访问iframe内容，使用CSS隐藏");
+                    }
+                } catch (error) {
+                    console.error("隐藏UI元素时出错:", error);
+                }
+            }, 2000);
+        }
+
+        // 初始化 Automation API
+        function initAutomationAPI() {
+            try {
+                connector = docEditor.createConnector();
+                console.log("Automation API connector 已创建:", connector);
+
+                // 检查连接状态
+                if (connector.isConnected) {
+                    console.log("Automation API 已连接成功");
+                } else {
+                    console.log("Automation API 连接状态未知");
+                }
+            } catch (error) {
+                console.error("创建 Automation API connector 失败:", error);
+            }
+        }
+        // 插入初始内容
+        function insertInitialContent() {
+            setTimeout(() => {
+                insertText("欢迎使用OnlyOffice API内容插入功能！");
+            }, 2000);
+        }
+
+        // 使用 Automation API 插入富文本和KaTeX公式（借鉴插件方法）
+        function insertRichTextWithKaTeX() {
+            if (!connector) {
+                alert('Automation API 未初始化');
+                return;
+            }
+
+            var richTextContent = document.getElementById('richTextInput').value;
+            if (!richTextContent) {
+                richTextContent = document.getElementById('richTextInput').placeholder;
+            }
+
+            console.log('开始解析包含LaTeX公式的HTML内容...', richTextContent);
+
+            // 在客户端预处理内容
+            var parsedContent = parseLatexContent(richTextContent);
+            console.log('解析后的内容:', parsedContent);
+
+            // 借鉴插件的方法，使用 InsertContent 分批插入
+            var script = `
+                try {
+                    var oDocument = Api.GetDocument();
+                    var allContent = [];
+                    var currentParagraph = Api.CreateParagraph();
+                    var hasParagraphContent = false;
+
+                    console.log('开始处理内容，共', ${parsedContent.length}, '个项目');
+
+                    // 处理所有解析后的内容
+                    for (var i = 0; i < ${parsedContent.length}; i++) {
+                        var item = ${JSON.stringify(parsedContent)}[i];
+                        console.log('处理项目', i, ':', item);
+
+                        if (item.type === 'text') {
+                            var safeText = item.content.trim();
+                            if (safeText) {
+                                var oRun = Api.CreateRun();
+                                oRun.AddText(safeText);
+
+                                // 如果是题目，设置样式
+                                if (safeText.indexOf('【例') !== -1) {
+                                    oRun.SetBold(true);
+                                    oRun.SetColor(50, 50, 150);
+                                }
+
+                                currentParagraph.AddElement(oRun);
+                                hasParagraphContent = true;
+                            }
+
+                        } else if (item.type === 'math') {
+                            // 如果当前段落有内容，先添加到allContent
+                            if (hasParagraphContent) {
+                                allContent.push(currentParagraph);
+                                oDocument.InsertContent(allContent);
+                                allContent = [];
+                                currentParagraph = Api.CreateParagraph();
+                                hasParagraphContent = false;
+                            }
+
+                            // 插入数学公式
+                            var safeLatex = item.content.trim();
+                            if (safeLatex) {
+                                try {
+                                    console.log('插入LaTeX公式:', safeLatex);
+                                    
+                                    // 检查是否包含逗号分隔的多个表达式
+                                    if (safeLatex.includes(',')) {
+                                        console.log('检测到包含逗号的复合表达式，使用文本模式处理');
+                                        
+                                        // 对于包含逗号的复合表达式，直接使用文本模式处理
+                                        var displayText = safeLatex
+                                            .replace(/\\\\frac\\{([^}]+)\\}\\{([^}]+)\\}/g, '$1/$2')
+                                            .replace(/\\frac\\{([^}]+)\\}\\{([^}]+)\\}/g, '$1/$2')
+                                            .replace(/\\\\sqrt\\{([^}]+)\\}/g, '√$1')
+                                            .replace(/\\sqrt\\{([^}]+)\\}/g, '√$1')
+                                            .replace(/\\\\pm/g, '±')
+                                            .replace(/\\pm/g, '±')
+                                            .replace(/\\\\times/g, '×')
+                                            .replace(/\\times/g, '×')
+                                            .replace(/\\\\cdot/g, '·')
+                                            .replace(/\\cdot/g, '·')
+                                            .replace(/\\{/g, '')
+                                            .replace(/\\}/g, '')
+                                            .replace(/\\\\/g, '');
+                                        
+                                        // 创建内联数学文本
+                                        var mathRun = Api.CreateRun();
+                                        mathRun.AddText(displayText);
+                                        mathRun.SetItalic(true);
+                                        mathRun.SetColor(50, 50, 200);
+                                        mathRun.SetBold(false);
+                                        mathRun.SetFontSize(12);
+                                        
+                                        currentParagraph.AddElement(mathRun);
+                                        hasParagraphContent = true;
+                                        
+                                        console.log('复合表达式处理为文本:', displayText);
+                                        
+                                    } else {
+                                        // 单个表达式的正常处理
+                                        oDocument.AddMathEquation(safeLatex, "latex");
+                                        console.log('LaTeX公式插入成功');
+                                    }
+                                    
+                                } catch (mathError) {
+                                    console.log('LaTeX公式插入失败，使用文本代替:', mathError);
+                                    // 创建样式化的数学文本段落
+                                    var mathPara = Api.CreateParagraph();
+                                    var mathRun = Api.CreateRun();
+
+                                    // 转换LaTeX为Unicode数学符号
+                                    var displayText = safeLatex
+                                        .replace(/\\\\frac\\{([^}]+)\\}\\{([^}]+)\\}/g, '($1)/($2)')
+                                        .replace(/\\frac\\{([^}]+)\\}\\{([^}]+)\\}/g, '($1)/($2)')
+                                        .replace(/\\\\sqrt\\{([^}]+)\\}/g, '√($1)')
+                                        .replace(/\\sqrt\\{([^}]+)\\}/g, '√($1)')
+                                        .replace(/\\\\pm/g, '±')
+                                        .replace(/\\pm/g, '±')
+                                        .replace(/\\\\ge/g, '≥')
+                                        .replace(/\\ge/g, '≥')
+                                        .replace(/\\\\le/g, '≤')
+                                        .replace(/\\le/g, '≤')
+                                        .replace(/\\\\cdot/g, '·')
+                                        .replace(/\\cdot/g, '·')
+                                        .replace(/\\\\times/g, '×')
+                                        .replace(/\\times/g, '×')
+                                        .replace(/\\\\div/g, '÷')
+                                        .replace(/\\div/g, '÷')
+                                        .replace(/\\\\ne/g, '≠')
+                                        .replace(/\\ne/g, '≠')
+                                        .replace(/\\\\sum/g, 'Σ')
+                                        .replace(/\\sum/g, 'Σ')
+                                        .replace(/\\\\pi/g, 'π')
+                                        .replace(/\\pi/g, 'π')
+                                        .replace(/\\\\alpha/g, 'α')
+                                        .replace(/\\alpha/g, 'α')
+                                        .replace(/\\\\beta/g, 'β')
+                                        .replace(/\\beta/g, 'β')
+                                        .replace(/\\\\gamma/g, 'γ')
+                                        .replace(/\\gamma/g, 'γ')
+                                        .replace(/\\\\delta/g, 'δ')
+                                        .replace(/\\delta/g, 'δ')
+                                        .replace(/\\\\theta/g, 'θ')
+                                        .replace(/\\theta/g, 'θ')
+                                        .replace(/\\\\lambda/g, 'λ')
+                                        .replace(/\\lambda/g, 'λ')
+                                        .replace(/\\\\mu/g, 'μ')
+                                        .replace(/\\mu/g, 'μ')
+                                        .replace(/\\\\sigma/g, 'σ')
+                                        .replace(/\\sigma/g, 'σ')
+                                        .replace(/\\\\phi/g, 'φ')
+                                        .replace(/\\phi/g, 'φ')
+                                        .replace(/\\\\omega/g, 'ω')
+                                        .replace(/\\omega/g, 'ω');
+
+                                    mathRun.AddText(displayText);
+                                    mathRun.SetItalic(true);
+                                    mathRun.SetColor(0, 100, 200);
+                                    mathRun.SetBold(true);
+                                    mathRun.SetFontSize(12);
+
+                                    mathPara.AddElement(mathRun);
+                                    allContent.push(mathPara);
+                                }
+                            }
+                        }
+                    }
+
+                    // 插入最后的段落
+                    if (hasParagraphContent) {
+                        allContent.push(currentParagraph);
+                    }
+
+                    if (allContent.length > 0) {
+                        oDocument.InsertContent(allContent);
+                    }
+
+                    console.log('所有内容处理完成');
+
+                } catch (error) {
+                    console.error('富文本+LaTeX插入失败:', error);
+                }
+            `;
+
+            console.log('生成的脚本:', script);
+
+            connector.callCommand(script, function(returnValue) {
+                console.log("富文本+KaTeX插入完成:", returnValue);
+            });
+        }
+
+        // 解析LaTeX内容
+        function parseLatexContent(htmlContent) {
+            console.log('开始解析内容:', htmlContent);
+
+            // 清理HTML标签
+            var cleanText = htmlContent
+                .replace(/<p>/g, '')
+                .replace(/<\/p>/g, '\n')
+                .replace(/<img[^>]*>/g, '[图片]')
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"');
+
+            var result = [];
+            var lines = cleanText.split('\n');
+
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (!line) continue;
+
+                // 处理每一行，分离文本和数学公式
+                var parts = parseLineWithMath(line);
+                result = result.concat(parts);
+            }
+
+            console.log('解析结果:', result);
+            return result;
+        }
+
+        // 解析单行中的文本和数学公式
+        function parseLineWithMath(line) {
+            var parts = [];
+            var currentText = '';
+            var i = 0;
+
+            while (i < line.length) {
+                // 查找 \[ ... \] 格式的显示数学公式
+                if (line.substring(i, i + 2) === '\\[') {
+                    var endPos = line.indexOf('\\]', i + 2);
+                    if (endPos !== -1) {
+                        // 保存之前的文本
+                        if (currentText) {
+                            parts.push({ type: 'text', content: currentText });
+                            currentText = '';
+                        }
+
+                        // 提取数学公式
+                        var mathContent = line.substring(i + 2, endPos);
+                        parts.push({ type: 'math', content: mathContent });
+
+                        i = endPos + 2;
+                        continue;
+                    }
+                }
+
+                // 查找 $ ... $ 格式的数学公式
+                if (line[i] === '$' && i + 1 < line.length) {
+                    var endPos = line.indexOf('$', i + 1);
+                    if (endPos !== -1) {
+                        // 保存之前的文本
+                        if (currentText) {
+                            parts.push({ type: 'text', content: currentText });
+                            currentText = '';
+                        }
+
+                        // 提取数学公式
+                        var mathContent = line.substring(i + 1, endPos);
+                        parts.push({ type: 'math', content: mathContent });
+
+                        i = endPos + 1;
+                        continue;
+                    }
+                }
+
+                // 查找 \\( ... \\) 格式的数学公式
+                if (line.substring(i, i + 2) === '\\(') {
+                    var endPos = line.indexOf('\\)', i + 2);
+                    if (endPos !== -1) {
+                        // 保存之前的文本
+                        if (currentText) {
+                            parts.push({ type: 'text', content: currentText });
+                            currentText = '';
+                        }
+
+                        // 提取数学公式
+                        var mathContent = line.substring(i + 2, endPos);
+                        parts.push({ type: 'math', content: mathContent });
+
+                        i = endPos + 2;
+                        continue;
+                    }
+                }
+
+                // 普通字符
+                currentText += line[i];
+                i++;
+            }
+
+            // 保存剩余文本
+            if (currentText) {
+                parts.push({ type: 'text', content: currentText });
+            }
+
+            return parts;
+        }
+
+        // 按行组织内容，避免不必要的换行
+        function organizeContentByLines(parsedContent) {
+            var lines = [];
+            var currentLine = [];
+
+            for (var i = 0; i < parsedContent.length; i++) {
+                var item = parsedContent[i];
+
+                // 检查是否应该开始新行
+                if (item.type === 'text' && (
+                    item.content.includes('12．') ||
+                    item.content.includes('【例 4') ||
+                    item.content.includes('求根号')
+                )) {
+                    // 保存当前行并开始新行
+                    if (currentLine.length > 0) {
+                        lines.push(currentLine);
+                        currentLine = [];
+                    }
+                }
+
+                currentLine.push(item);
+            }
+
+            // 保存最后一行
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+
+            console.log('按行组织的内容:', lines);
+            return lines;
+        }
+
+        // 测试数学公式API（基于官方示例）
+        function testMathEquation() {
+            if (!connector) {
+                alert('Automation API 未初始化');
+                return;
+            }
+
+            var script = `
+                try {
+                    var doc = Api.GetDocument();
+                    console.log("Document API available:", typeof doc);
+                    console.log("AddMathEquation available:", typeof doc.AddMathEquation);
+
+                    // 添加标题
+                    var oTitle = Api.CreateParagraph();
+                    oTitle.AddText("API测试结果:");
+                    var oTitlePr = oTitle.GetTextPr();
+                    oTitlePr.SetBold(true);
+                    oTitlePr.SetFontSize(16);
+                    doc.Push(oTitle);
+
+                    // 测试API是否存在
+                    var oInfo = Api.CreateParagraph();
+                    if (typeof doc.AddMathEquation === 'function') {
+                        oInfo.AddText("✓ AddMathEquation API 可用");
+                        oInfo.GetTextPr().SetColor(0, 150, 0);
+
+                        // 尝试插入简单公式
+                        doc.AddMathEquation("a > b", "latex");
+
+                    } else {
+                        oInfo.AddText("✗ AddMathEquation API 不可用");
+                        oInfo.GetTextPr().SetColor(150, 0, 0);
+                    }
+                    doc.Push(oInfo);
+
+                    console.log("API测试完成");
+                } catch (e) {
+                    console.error("API测试失败:", e.message, e.stack);
+                }
+            `;
+
+            connector.callCommand(script, function(returnValue) {
+                console.log("API测试结果:", returnValue);
+            });
+        }
+
+        // 测试所有可能的数学公式方法
+        function testAllMathMethods() {
+            if (!connector) {
+                alert('Automation API 未初始化');
+                return;
+            }
+
+            var script = `
+                try {
+                    var doc = Api.GetDocument();
+
+                    // 测试标题
+                    var oTitle = Api.CreateParagraph();
+                    oTitle.AddText("详细测试所有数学公式方法:");
+                    oTitle.GetTextPr().SetBold(true);
+                    oTitle.GetTextPr().SetFontSize(16);
+                    doc.Push(oTitle);
+
+                    // 方法1: AddMathEquation
+                    var oPara1 = Api.CreateParagraph();
+                    oPara1.AddText("方法1 AddMathEquation: ");
+                    try {
+                        if (typeof doc.AddMathEquation === 'function') {
+                            oPara1.AddText("API可用，测试结果: ");
+                            doc.Push(oPara1);
+                            doc.AddMathEquation("x^2 + y^2 = z^2", "latex");
+                            var oTestPara = Api.CreateParagraph();
+                            oTestPara.AddText("↑ 上面应该显示数学公式");
+                            doc.Push(oTestPara);
+                        } else {
+                            oPara1.AddText("API不可用");
+                            oPara1.GetTextPr().SetColor(150, 0, 0);
+                            doc.Push(oPara1);
+                        }
+                    } catch (e) {
+                        oPara1.AddText("执行失败: " + e.message);
+                        oPara1.GetTextPr().SetColor(150, 0, 0);
+                        doc.Push(oPara1);
+                    }
+
+                    // 方法2: CreateMath
+                    var oPara2 = Api.CreateParagraph();
+                    oPara2.AddText("方法2 CreateMath: ");
+                    try {
+                        if (typeof Api.CreateMath === 'function') {
+                            var oMath = Api.CreateMath();
+                            console.log("CreateMath result:", oMath);
+                            console.log("CreateMath type:", typeof oMath);
+                            if (oMath) {
+                                console.log("oMath methods:", Object.getOwnPropertyNames(oMath));
+                                if (typeof oMath.AddText === 'function') {
+                                    oMath.AddText("a > b");
+                                    oPara2.AddText("API可用，尝试添加到段落 - ");
+                                    oPara2.AddElement(oMath);
+                                } else {
+                                    oPara2.AddText("CreateMath对象没有AddText方法");
+                                    oPara2.GetTextPr().SetColor(150, 0, 0);
+                                }
+                            } else {
+                                oPara2.AddText("CreateMath返回null");
+                                oPara2.GetTextPr().SetColor(150, 0, 0);
+                            }
+                        } else {
+                            oPara2.AddText("CreateMath API不存在");
+                            oPara2.GetTextPr().SetColor(150, 0, 0);
+                        }
+                    } catch (e) {
+                        oPara2.AddText("执行失败: " + e.message);
+                        oPara2.GetTextPr().SetColor(150, 0, 0);
+                    }
+                    doc.Push(oPara2);
+
+                    // 方法3: 尝试内联数学公式的其他方法
+                    var oPara3 = Api.CreateParagraph();
+                    oPara3.AddText("方法3 内联数学测试: ");
+                    try {
+                        // 测试是否可以创建内联公式
+                        var oRun = Api.CreateRun();
+                        oRun.AddText("这是普通文本 ");
+                        oPara3.AddElement(oRun);
+
+                        // 尝试添加数学内容
+                        if (typeof doc.AddMathEquation === 'function') {
+                            // 先添加当前段落
+                            doc.Push(oPara3);
+                            // 然后添加数学公式（这会是块级的）
+                            doc.AddMathEquation("a+b=c", "latex");
+                            // 再添加后续文本
+                            var oAfterPara = Api.CreateParagraph();
+                            oAfterPara.AddText("这是公式后的文本");
+                            doc.Push(oAfterPara);
+                        } else {
+                            oPara3.AddText("无法测试内联数学");
+                            doc.Push(oPara3);
+                        }
+                    } catch (e) {
+                        oPara3.AddText("内联测试失败: " + e.message);
+                        oPara3.GetTextPr().SetColor(150, 0, 0);
+                        doc.Push(oPara3);
+                    }
+
+                    // 方法4: 检查所有可用的API
+                    var oPara4 = Api.CreateParagraph();
+                    oPara4.AddText("可用的数学相关API: ");
+                    var mathAPIs = [];
+                    if (typeof Api.CreateMath === 'function') mathAPIs.push("CreateMath");
+                    if (typeof doc.AddMathEquation === 'function') mathAPIs.push("AddMathEquation");
+                    if (typeof Api.CreateMathParagraph === 'function') mathAPIs.push("CreateMathParagraph");
+                    if (typeof Api.CreateInlineMath === 'function') mathAPIs.push("CreateInlineMath");
+
+                    oPara4.AddText(mathAPIs.length > 0 ? mathAPIs.join(", ") : "无数学API可用");
+                    doc.Push(oPara4);
+
+                    console.log("详细数学方法测试完成");
+                } catch (e) {
+                    console.error("测试失败:", e.message);
+                }
+            `;
+
+            connector.callCommand(script, function(returnValue) {
+                console.log("数学方法测试结果:", returnValue);
+            });
+        }
+
+        // 加载示例LaTeX内容
+        function loadSampleLatex() {
+            var sampleContent = `<p>1．（3分）列运算正确的是（ ） \\[ \\sqrt{3} \\times \\sqrt{2}=\\sqrt{6} \\quad \\sqrt{2}+\\sqrt{3}=\\sqrt{5} \\quad(3 \\sqrt{2})^{2}=6 \\quad \\sqrt{(-3)^{2}}=-3 \\]</p>
+    <p>10．（3）关于的方程 $x+\\frac{2}{x}=c+\\frac{2}{c}$ 的两解是 $xc,x=\\frac{2}{c}$ ，则关于 $x$ 的方的 $+\\frac{2}{x-1}=a+\\frac{2}{a-1}$ 的解（ ） $-\\frac{2}{a}$ al，$\\frac{2}{a-1}$ a，$\\frac{2}{a-1}$ $1,\\frac{a+1}{a-1}$a是的发送地方</p>
+    <p>【例 2】（1）根据a $a>b$ ，则下面哪个不等式不一定成立（ ） A．$a+c^2>b+c^2$ B．$a-c^2>b-c^2$ C．$ac^2>bc^2$ D．$\\frac{a}{c^{2}+1}>\\frac{b}{c^{2}+1}$a</p>
+    <p>12．（分）在数 \\( y=\\frac{x-1}{4 x+2} \\) 中，变量 \\( z \\) 的取值范围是</p>
+    <p>【例 4 】（1）已知 $a,b$ 是不为 0 的实数，且 $a,b$ ，那么用数轴上的点来表示 $|a|=-a,|b|=b,|a|>|b|$ ，正确的是（ ）</p>
+    <p>求根号：\\( \\sqrt{778} \\) 和 \\( \\sqrt{a^2 + b^2} \\) 和 \\( \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} \\)</p>`;
+
+            document.getElementById('richTextInput').value = sampleContent;
+        }
+
+        // 仅使用AddMathEquation插入富文本内容
+        function testAddMathEquationOnly() {
+            if (!connector) {
+                alert('Automation API 未初始化');
+                return;
+            }
+
+            var richTextContent = document.getElementById('richTextInput').value;
+            if (!richTextContent) {
+                richTextContent = document.getElementById('richTextInput').placeholder;
+            }
+
+            console.log('开始使用AddMathEquation处理富文本内容...', richTextContent);
+
+            // 解析内容
+            var parsedContent = parseLatexContent(richTextContent);
+            console.log('解析后的内容:', parsedContent);
+
+            var script = `
+                try {
+                    var oDocument = Api.GetDocument();
+                    var parsedItems = ${richTextContent};
+                    
+                var result = oDocument.AddMathEquation(cleanLatex, "latex");
+                                        console.log('AddMathEquation结果:', result);
+                                        
+                                        if (result === false || result === null) {
+                                            throw new Error('AddMathEquation返回false或null');
+                                        }
+                } catch (error) {
+                    console.error('AddMathEquation方法测试失败:', error);
+                }
+            `;
+
+            console.log('执行脚本:', script);
+
+            connector.callCommand(script, function(returnValue) {
+                console.log("AddMathEquation方法测试完成:", returnValue);
+            });
+        }
+
+        // 测试分数公式渲染
+        function testFractionFormula() {
+            if (!connector) {
+                alert('Automation API 未初始化');
+                return;
+            }
+
+            var script = `
+                try {
+                    var oDocument = Api.GetDocument();
+                    
+                    // 添加测试标题
+                    var oTitle = Api.CreateParagraph();
+                    oTitle.AddText("分数公式渲染测试:");
+                    oTitle.GetTextPr().SetBold(true);
+                    oTitle.GetTextPr().SetFontSize(16);
+                    oDocument.Push(oTitle);
+
+                    // 测试各种分数公式
+                    var fractionTests = [
+                        { formula: "\\\\frac{a+1}{a-1}", description: "问题公式（双反斜杠）" },
+                        { formula: "\\frac{a+1}{a-1}", description: "标准分数公式" },
+                        { formula: "frac{a+1}{a-1}", description: "无反斜杠" },
+                        { formula: "(a+1)/(a-1)", description: "括号形式" },
+                        { formula: "\\\\frac{2}{x}", description: "简单分数（双反斜杠）" },
+                        { formula: "\\frac{2}{x}", description: "简单分数（标准）" }
+                    ];
+
+                    for (var i = 0; i < fractionTests.length; i++) {
+                        var test = fractionTests[i];
+                        console.log('测试公式', i+1, ':', test.formula);
+                        
+                        // 添加描述
+                        var oDesc = Api.CreateParagraph();
+                        oDesc.AddText((i+1) + ". " + test.description + " : " + test.formula);
+                        oDocument.Push(oDesc);
+                        
+                        // 尝试渲染公式
+                        try {
+                            var result = oDocument.AddMathEquation(test.formula, "latex");
+                            console.log('公式', i+1, '渲染结果:', result);
+                            
+                            if (result === false || result === null) {
+                                var oError = Api.CreateParagraph();
+                                var oErrorRun = Api.CreateRun();
+                                oErrorRun.AddText("↑ 渲染失败 (返回值: " + result + ")");
+                                oErrorRun.SetColor(200, 0, 0);
+                                oError.AddElement(oErrorRun);
+                                oDocument.Push(oError);
+                            } else {
+                                var oSuccess = Api.CreateParagraph();
+                                var oSuccessRun = Api.CreateRun();
+                                oSuccessRun.AddText("↑ 渲染成功");
+                                oSuccessRun.SetColor(0, 150, 0);
+                                oSuccess.AddElement(oSuccessRun);
+                                oDocument.Push(oSuccess);
+                            }
+                            
+                        } catch (error) {
+                            console.error('公式', i+1, '渲染异常:', error);
+                            var oException = Api.CreateParagraph();
+                            var oExceptionRun = Api.CreateRun();
+                            oExceptionRun.AddText("↑ 渲染异常: " + error.message);
+                            oExceptionRun.SetColor(200, 0, 0);
+                            oException.AddElement(oExceptionRun);
+                            oDocument.Push(oException);
+                        }
+                        
+                        // 添加分隔符
+                        var oSeparator = Api.CreateParagraph();
+                        oSeparator.AddText("---");
+                        oDocument.Push(oSeparator);
+                    }
+
+                    console.log('分数公式测试完成');
+
+                } catch (error) {
+                    console.error('分数公式测试失败:', error);
+                }
+            `;
+
+            connector.callCommand(script, function(returnValue) {
+                console.log("分数公式测试结果:", returnValue);
+            });
+        }
+
+        // 简化的富文本处理
+        function processRichText(htmlContent) {
+            // 移除HTML标签，但保留公式标记
+            var textContent = htmlContent
+                .replace(/<p>/g, '')
+                .replace(/<\/p>/g, '\n')
+                .replace(/<img[^>]*>/g, '[图片]')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+
+            return textContent;
+        }
+
+    </script>
+</body>
+</html>

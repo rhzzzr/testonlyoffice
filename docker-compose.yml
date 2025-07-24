@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver-de:latest
+    container_name: onlyoffice-documentserver
+    ports:
+      - "8081:80"
+      - "8443:443"
+    volumes:
+      - ./data/onlyoffice/DocumentServer/logs:/var/log/onlyoffice
+      - ./data/onlyoffice/DocumentServer/data:/var/www/onlyoffice/Data
+      - ./data/onlyoffice/DocumentServer/lib:/var/lib/onlyoffice
+      - ./data/onlyoffice/DocumentServer/rabbitmq:/var/lib/rabbitmq
+      - ./data/onlyoffice/DocumentServer/redis:/var/lib/redis
+      - ./data/onlyoffice/DocumentServer/db:/var/lib/postgresql
+    restart: always
+    environment:
+      - JWT_ENABLED=false
+      - JWT_SECRET=your_jwt_secret_here
+      - JWT_HEADER=Authorization
+      - JWT_IN_BODY=true
+      - WOPI_ENABLED=false
+      - USE_UNAUTHORIZED_STORAGE=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - ALLOW_META_IP_ADDRESS=true
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - onlyoffice-network
+
+  callback-server:
+    build: .
+    container_name: callback-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./documents:/app/documents
+      - .:/app
+    working_dir: /app
+    command: node callback-server.js
+    networks:
+      - onlyoffice-network
+
+networks:
+  onlyoffice-network:
+    driver: bridge

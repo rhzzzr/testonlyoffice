@@ -1,0 +1,23 @@
+{
+  "name": "onlyoffice-callback-server",
+  "version": "1.0.0",
+  "description": "OnlyOffice Document Server Callback Handler",
+  "main": "callback-server.js",
+  "scripts": {
+    "start": "node callback-server.js",
+    "dev": "nodemon callback-server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "onlyoffice",
+    "callback",
+    "document-server"
+  ],
+  "author": "",
+  "license": "MIT"
+}
